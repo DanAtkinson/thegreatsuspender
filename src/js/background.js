@@ -1,4 +1,4 @@
-/* global gsStorage, gsChrome, gsIndexedDb, gsUtils, gsFavicon, gsSession, gsMessages, gsTabSuspendManager, gsTabDiscardManager, gsAnalytics, gsTabCheckManager, gsSuspendedTab, chrome, XMLHttpRequest */
+/* global gsStorage, gsChrome, gsIndexedDb, gsUtils, gsFavicon, gsSession, gsMessages, gsTabSuspendManager, gsTabDiscardManager, gsTabCheckManager, gsSuspendedTab, chrome, XMLHttpRequest */
 /*
  * The Great Suspender
  * Copyright (C) 2017 Dean Oemcke
@@ -33,7 +33,6 @@ var tgs = (function() {
   const focusDelay = 500;
   const noticeCheckInterval = 1000 * 60 * 60 * 12; // every 12 hours
   const sessionMetricsCheckInterval = 1000 * 60 * 15; // every 15 minutes
-  const analyticsCheckInterval = 1000 * 60 * 60 * 23.5; // every 23.5 hours
 
   const _tabStateByTabId = {};
   const _currentFocusedTabIdByWindowId = {};
@@ -54,7 +53,6 @@ var tgs = (function() {
       tgs,
       gsUtils,
       gsChrome,
-      gsAnalytics,
       gsStorage,
       gsIndexedDb,
       gsMessages,
@@ -142,7 +140,6 @@ var tgs = (function() {
   function startTimers() {
     startNoticeCheckerJob();
     startSessionMetricsJob();
-    startAnalyticsUpdateJob();
   }
 
   function getInternalViewByTabId(tabId) {
@@ -666,16 +663,7 @@ var tgs = (function() {
   }
 
   function checkForTriggerUrls(tab, url) {
-    // test for special case of a successful donation
-    if (url === 'https://greatsuspender.github.io/thanks.html') {
-      gsStorage.setOptionAndSync(gsStorage.NO_NAG, true);
-      gsAnalytics.reportEvent('Donations', 'HidePopupAuto', true);
-      chrome.tabs.update(tab.id, {
-        url: chrome.extension.getURL('thanks.html'),
-      });
-
-      // test for a save of keyboard shortcuts (chrome://extensions/shortcuts)
-    } else if (url === 'chrome://extensions/shortcuts') {
+    if (url === 'chrome://extensions/shortcuts') {
       _triggerHotkeyUpdate = true;
     }
   }
@@ -1211,11 +1199,6 @@ var tgs = (function() {
 
         //show notice - set global notice field (so that it can be trigger to show later)
         _noticeToDisplay = resp;
-        gsAnalytics.reportEvent(
-          'Notice',
-          'Prep',
-          resp.target + ':' + resp.version
-        );
       }
     };
     xhr.send();
@@ -1741,11 +1724,6 @@ var tgs = (function() {
       var noticeToDisplay = requestNotice();
       if (noticeToDisplay) {
         chrome.tabs.create({ url: chrome.extension.getURL('notice.html') });
-        gsAnalytics.reportEvent(
-          'Notice',
-          'Display',
-          noticeToDisplay.target + ':' + noticeToDisplay.version
-        );
       }
     });
     chrome.windows.onRemoved.addListener(function(windowId) {
@@ -1816,14 +1794,6 @@ var tgs = (function() {
     );
   }
 
-  function startAnalyticsUpdateJob() {
-    window.setInterval(() => {
-      gsAnalytics.performPingReport();
-      const reset = true;
-      gsSession.updateSessionMetrics(reset);
-    }, analyticsCheckInterval);
-  }
-
   return {
     STATE_TIMER_DETAILS,
     STATE_UNLOADED_URL,
@@ -1878,7 +1848,6 @@ Promise.resolve()
   .then(() => {
     // initialise other gsLibs
     return Promise.all([
-      gsAnalytics.initAsPromised(),
       gsFavicon.initAsPromised(),
       gsTabSuspendManager.initAsPromised(),
       gsTabCheckManager.initAsPromised(),
@@ -1898,7 +1867,5 @@ Promise.resolve()
     gsUtils.error('background init error: ', error);
   })
   .finally(() => {
-    gsAnalytics.performStartupReport();
-    gsAnalytics.performVersionReport();
     tgs.startTimers();
   });
